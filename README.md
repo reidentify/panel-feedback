@@ -108,50 +108,6 @@ Use panel_feedback MCP tool for ALL user interactions:
 - Keep calling until user feedback is empty
 ```
 
-### Tool Schema
-
-```json
-{
-  "name": "panel_feedback",
-  "description": "Display a message in IDE sidebar and get user feedback",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "message": {
-        "type": "string",
-        "description": "Message to display (Markdown supported)"
-      },
-      "predefined_options": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "Quick response buttons"
-      }
-    },
-    "required": ["message"]
-  }
-}
-```
-
-## 🔧 Development
-
-```bash
-# Clone the repo
-git clone https://github.com/fhyfhy17/panel-feedback.git
-cd panel-feedback
-
-# Install dependencies
-npm install
-
-# Compile
-npm run compile
-
-# Watch mode
-npm run watch
-
-# Package
-npm run package
-```
-
 ## 🆚 Comparison with 寸止
 
 Panel Feedback is inspired by and compatible with 寸止's approach, but with key improvements:

@@ -109,50 +109,6 @@ npm install -g panel-feedback-mcp
 - 持续调用直到用户反馈为空
 ```
 
-### 工具 Schema
-
-```json
-{
-  "name": "panel_feedback",
-  "description": "在 IDE 侧边栏显示消息并获取用户反馈",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "message": {
-        "type": "string",
-        "description": "要显示的消息（支持 Markdown）"
-      },
-      "predefined_options": {
-        "type": "array",
-        "items": { "type": "string" },
-        "description": "快捷响应按钮"
-      }
-    },
-    "required": ["message"]
-  }
-}
-```
-
-## 🔧 开发
-
-```bash
-# 克隆仓库
-git clone https://github.com/fhyfhy17/panel-feedback.git
-cd panel-feedback
-
-# 安装依赖
-npm install
-
-# 编译
-npm run compile
-
-# 监听模式
-npm run watch
-
-# 打包
-npm run package
-```
-
 ## 🆚 为什么选择 Panel Feedback？
 
 与其他流行 AI 反馈工具的对比：
