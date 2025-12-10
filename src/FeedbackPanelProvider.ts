@@ -362,6 +362,28 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             background: var(--vscode-editor-selectionBackground);
         }
         .hidden { display: none !important; }
+        
+        /* 新消息高亮样式 - 2秒闪烁效果 */
+        .current-question.new-message {
+            animation: flashHighlight 2s ease-out;
+        }
+        
+        @keyframes flashHighlight {
+            0% { 
+                background: rgba(255, 152, 0, 0.15);
+                border-left: 3px solid #FF9800;
+                transform: scale(1.01);
+            }
+            50% { 
+                background: rgba(255, 152, 0, 0.1);
+                border-left: 3px solid #FF9800;
+            }
+            100% { 
+                background: var(--vscode-editor-background);
+                border-left: 3px solid transparent;
+                transform: scale(1);
+            }
+        }
     </style>
 </head>
 <body>
@@ -425,6 +447,22 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
 
         let images = [];
         let historyData = [];
+        
+        // 1秒闪烁效果
+        function showNewMessageHighlight() {
+            const question = document.getElementById('currentQuestion');
+            if (!question) return;
+            
+            // 移除后重新添加以重新触发动画
+            question.classList.remove('new-message');
+            void question.offsetWidth; // 触发 reflow
+            question.classList.add('new-message');
+            
+            // 2秒后移除 class
+            setTimeout(() => {
+                question.classList.remove('new-message');
+            }, 2000);
+        }
 
         // 简单的 Markdown 渲染
         function renderMarkdown(text) {
@@ -517,6 +555,9 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             }
             
             messageContent.innerHTML = renderMarkdown(message);
+            
+            // 显示1秒闪烁效果
+            showNewMessageHighlight();
             
             // 滚动到底部
             scrollToBottom();
