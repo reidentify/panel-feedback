@@ -46,45 +46,15 @@ export function activate(context: vscode.ExtensionContext) {
     // 复制 MCP 配置命令
     context.subscriptions.push(
         vscode.commands.registerCommand('feedbackPanel.copyMcpConfig', async () => {
-            const choice = await vscode.window.showQuickPick([
-                {
-                    label: '$(package) NPM Package (Recommended)',
-                    description: 'Use global npm package (simpler)',
-                    detail: 'Run: npm install -g panel-feedback-mcp'
-                },
-                {
-                    label: '$(file-code) Extension Path',
-                    description: 'Use local extension file',
-                    detail: 'Uses the installed extension directly'
+            // 直接使用扩展路径方式
+            const wrapperPath = vscode.Uri.joinPath(context.extensionUri, 'mcp-stdio-wrapper.js').fsPath;
+            const config = {
+                "panel-feedback": {
+                    "command": "node",
+                    "args": [wrapperPath]
                 }
-            ], {
-                placeHolder: 'Choose MCP configuration method'
-            });
-
-            if (!choice) return;
-
-            let config: any;
-            let instruction: string;
-
-            if (choice.label.includes('NPM')) {
-                // NPM 包方式
-                config = {
-                    "panel-feedback": {
-                        "command": "panel-feedback-mcp"
-                    }
-                };
-                instruction = 'First install: npm install -g panel-feedback-mcp\nThen paste this config into mcp_config.json under mcpServers.';
-            } else {
-                // 扩展路径方式
-                const wrapperPath = vscode.Uri.joinPath(context.extensionUri, 'mcp-stdio-wrapper.js').fsPath;
-                config = {
-                    "panel-feedback": {
-                        "command": "node",
-                        "args": [wrapperPath]
-                    }
-                };
-                instruction = 'Paste this config into mcp_config.json under mcpServers.';
-            }
+            };
+            const instruction = 'Paste this config into mcp_config.json under mcpServers.';
 
             const configStr = JSON.stringify(config, null, 2);
             await vscode.env.clipboard.writeText(configStr);
