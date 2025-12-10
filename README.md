@@ -54,38 +54,31 @@ The feedback panel lives in your IDE - always visible, never intrusive.
 
 ## 🚀 Installation
 
-### 🎯 Method 1: NPM Package (Recommended ⭐)
+### Step 1️⃣ Install Extension
 
-```bash
-npm install -g panel-feedback-mcp
-```
+Download `.vsix` from [**Releases**](https://github.com/fhyfhy17/panel-feedback/releases/latest)
 
-Then: `Cmd+Shift+P` → `Panel Feedback: Copy MCP Config` → Choose "NPM Package"
+In VS Code/Windsurf:
+- `Cmd+Shift+P` → `Extensions: Install from VSIX...` → Select the downloaded file
 
-✨ **That's it!** No path hassles.
+✅ Now you have the **Sidebar Panel UI**
 
-### 📦 Method 2: Direct Extension  
+---
 
-1. Download latest `.vsix` from [**Releases**](https://github.com/fhyfhy17/panel-feedback/releases/latest)
-2. Install: `Cmd+Shift+P` → `Extensions: Install from VSIX...`
-3. Configure: `Cmd+Shift+P` → `Panel Feedback: Copy MCP Config` → Choose "Extension Path"
+### Step 2️⃣ Configure MCP Server
 
-### MCP Configuration
+The extension includes an MCP server. You need to tell your AI where to find it.
 
-After installation, add the config to your `mcp_config.json` file (usually in `~/.codeium/windsurf/` or similar):
+1. **Copy the config:**
+   - `Cmd+Shift+P` → `Panel Feedback: Copy MCP Config`
+   - This copies a JSON snippet to your clipboard
 
-**NPM Package (Recommended):**
-```json
-{
-  "mcpServers": {
-    "panel-feedback": {
-      "command": "panel-feedback-mcp"
-    }
-  }
-}
-```
+2. **Paste to MCP config file:**
+   - Open `~/.codeium/windsurf/mcp_config.json` (Windsurf)
+   - Or `~/.cursor/mcp.json` (Cursor)
+   - Add the copied content to `"mcpServers": { ... }`
 
-**Extension Path** (use the path from "Copy MCP Config" command):
+Example:
 ```json
 {
   "mcpServers": {
@@ -97,7 +90,17 @@ After installation, add the config to your `mcp_config.json` file (usually in `~
 }
 ```
 
-💡 **Tip**: The extension command "Copy MCP Config" automatically generates the correct path for you.
+✅ Now your AI can **call the panel_feedback tool**
+
+---
+
+### Step 3️⃣ Restart & Use
+
+1. Restart VS Code/Windsurf
+2. Click the 💬 icon in sidebar
+3. Tell your AI: "Use panel_feedback MCP for interactions"
+
+🎉 **Done!**
 
 ## 📖 Usage
 

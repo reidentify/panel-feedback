@@ -55,38 +55,31 @@
 
 ## 🚀 安装
 
-### 🎯 方式一：NPM 包（推荐 ⭐）
+### 第一步️⃣ 安装扩展
 
-```bash
-npm install -g panel-feedback-mcp
-```
+下载 `.vsix`：[**发布页面**](https://github.com/fhyfhy17/panel-feedback/releases/latest)
 
-然后：`Cmd+Shift+P` → `Panel Feedback: Copy MCP Config` → 选择 "NPM Package"
+在 VS Code/Windsurf 中：
+- `Cmd+Shift+P` → `Extensions: Install from VSIX...` → 选择下载的文件
 
-✨ **就这样！** 无需路径配置。
+✅ 现在你有了 **侧边栏面板 UI**
 
-### 📦 方式二：直接扩展
+---
 
-1. 下载最新 `.vsix`：[**发布页面**](https://github.com/fhyfhy17/panel-feedback/releases/latest)
-2. 安装：`Cmd+Shift+P` → `Extensions: Install from VSIX...`
-3. 配置：`Cmd+Shift+P` → `Panel Feedback: Copy MCP Config` → 选择 "Extension Path"
+### 第二步️⃣ 配置 MCP 服务器
 
-### MCP 配置
+扩展包含了 MCP 服务器。你需要告诉 AI 在哪里找到它。
 
-安装后，将配置添加到 `mcp_config.json` 文件（通常在 `~/.codeium/windsurf/` 或类似目录）：
+1. **复制配置：**
+   - `Cmd+Shift+P` → `Panel Feedback: Copy MCP Config`
+   - 这会复制一段 JSON 配置到剪贴板
 
-**NPM 包方式（推荐）：**
-```json
-{
-  "mcpServers": {
-    "panel-feedback": {
-      "command": "panel-feedback-mcp"
-    }
-  }
-}
-```
+2. **粘贴到 MCP 配置文件：**
+   - 打开 `~/.codeium/windsurf/mcp_config.json` (Windsurf)
+   - 或 `~/.cursor/mcp.json` (Cursor)
+   - 将复制的内容添加到 `"mcpServers": { ... }` 中
 
-**扩展路径方式**（使用 "Copy MCP Config" 命令获取路径）：
+示例：
 ```json
 {
   "mcpServers": {
@@ -98,7 +91,17 @@ npm install -g panel-feedback-mcp
 }
 ```
 
-💡 **提示**：扩展命令 "Copy MCP Config" 会自动生成正确的路径。
+✅ 现在 AI 可以 **调用 panel_feedback 工具**
+
+---
+
+### 第三步️⃣ 重启并使用
+
+1. 重启 VS Code/Windsurf
+2. 点击侧边栏的 💬 图标
+3. 告诉 AI："使用 panel_feedback MCP 进行交互"
+
+🎉 **完成！**
 
 ## 📖 使用方法
 
