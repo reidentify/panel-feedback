@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { FeedbackPanelProvider } from './FeedbackPanelProvider';
 import { MCPServer } from './mcpServer';
 import { execSync } from 'child_process';
+import * as https from 'https';
 
 /**
  * 获取 node 可执行文件的完整路径
@@ -22,8 +23,78 @@ function getNodePath(): string {
 
 let mcpServer: MCPServer | undefined;
 
+const GITHUB_REPO = 'fhyfhy17/panel-feedback';
+const EXTENSION_ID = 'fhyfhy17.windsurf-feedback-panel';
+
+/**
+ * Check for updates from GitHub releases
+ */
+async function checkForUpdates(): Promise<void> {
+    const currentExtension = vscode.extensions.getExtension(EXTENSION_ID);
+    if (!currentExtension) {
+        return;
+    }
+    
+    const currentVersion = currentExtension.packageJSON.version;
+    
+    const options = {
+        hostname: 'api.github.com',
+        path: `/repos/${GITHUB_REPO}/releases/latest`,
+        headers: {
+            'User-Agent': 'VSCode-Extension'
+        }
+    };
+    
+    https.get(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+            try {
+                const release = JSON.parse(data);
+                const latestVersion = release.tag_name?.replace('v', '') || '';
+                
+                if (latestVersion && compareVersions(latestVersion, currentVersion) > 0) {
+                    vscode.window.showInformationMessage(
+                        `🎉 Panel Feedback v${latestVersion} is available! (current: v${currentVersion})`,
+                        'Download',
+                        'Later'
+                    ).then(action => {
+                        if (action === 'Download') {
+                            vscode.env.openExternal(vscode.Uri.parse(release.html_url));
+                        }
+                    });
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        });
+    }).on('error', () => {
+        // Ignore network errors
+    });
+}
+
+/**
+ * Compare two version strings (e.g., "1.2.3" vs "1.2.4")
+ * Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+ */
+function compareVersions(v1: string, v2: string): number {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 > p2) return 1;
+        if (p1 < p2) return -1;
+    }
+    return 0;
+}
+
 export function activate(context: vscode.ExtensionContext) {
     console.log('Windsurf Feedback Panel is now active!');
+    
+    // Check for updates (delayed to not block activation)
+    setTimeout(() => checkForUpdates(), 5000);
 
     // 创建侧边栏 Provider
     const provider = new FeedbackPanelProvider(context.extensionUri);
