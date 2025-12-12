@@ -468,12 +468,35 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 12px;
+            position: relative;
         }
         .current-question .label {
             font-size: 11px;
             color: var(--vscode-textLink-foreground);
             margin-bottom: 6px;
             font-weight: 500;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 4px 6px;
+            background: transparent;
+            color: var(--vscode-descriptionForeground);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .copy-btn:hover {
+            opacity: 1;
+            background: var(--vscode-button-secondaryBackground);
+        }
+        .copy-btn.copied {
+            color: var(--vscode-testing-iconPassed);
+            border-color: var(--vscode-testing-iconPassed);
         }
         .options-container {
             display: flex;
@@ -665,6 +688,7 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         
         <!-- 当前问题区域 -->
         <div id="currentQuestion" class="current-question">
+            <button id="copyBtn" class="copy-btn" title="Copy">📋</button>
             <div class="label">🤖 AI</div>
             <div id="messageContent" class="message"></div>
         </div>
@@ -999,6 +1023,20 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             historyData = [];
             chatHistory.innerHTML = '';
             chatHistory.style.display = 'none';
+        };
+
+        // 复制按钮
+        const copyBtn = document.getElementById('copyBtn');
+        copyBtn.onclick = () => {
+            const content = messageContent.innerText || messageContent.textContent;
+            navigator.clipboard.writeText(content).then(() => {
+                copyBtn.textContent = '✓';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = '📋';
+                    copyBtn.classList.remove('copied');
+                }, 1500);
+            });
         };
 
         // 设置按钮
