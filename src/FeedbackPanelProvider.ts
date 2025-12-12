@@ -65,8 +65,13 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
     private _checkForUpdates() {
         const ext = vscode.extensions.getExtension('fhyfhy17.windsurf-feedback-panel');
         const currentVersion = ext?.packageJSON.version || '0.0.0';
+        const isZh = vscode.env.language.startsWith('zh');
         
         const https = require('https');
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        
         const options = {
             hostname: 'api.github.com',
             path: '/repos/fhyfhy17/panel-feedback/releases/latest',
@@ -81,6 +86,10 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                     const release = JSON.parse(data);
                     const latestVersion = release.tag_name?.replace('v', '') || '';
                     const hasUpdate = this._compareVersions(latestVersion, currentVersion) > 0;
+                    
+                    // Find vsix asset
+                    const vsixAsset = release.assets?.find((a: any) => a.name.endsWith('.vsix'));
+                    
                     this._view?.webview.postMessage({ 
                         type: 'updateResult', 
                         hasUpdate, 
@@ -88,15 +97,22 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                         downloadUrl: release.html_url 
                     });
                     
-                    if (hasUpdate) {
-                        vscode.window.showInformationMessage(
-                            `🎉 Panel Feedback v${latestVersion} is available!`,
-                            'Download'
-                        ).then(action => {
-                            if (action === 'Download') {
-                                vscode.env.openExternal(vscode.Uri.parse(release.html_url));
+                    if (hasUpdate && vsixAsset) {
+                        const msg = isZh 
+                            ? `🎉 Panel Feedback v${latestVersion} 可用！` 
+                            : `🎉 Panel Feedback v${latestVersion} is available!`;
+                        const installBtn = isZh ? '下载并安装' : 'Install';
+                        const laterBtn = isZh ? '稍后' : 'Later';
+                        
+                        vscode.window.showInformationMessage(msg, installBtn, laterBtn)
+                        .then(action => {
+                            if (action === installBtn) {
+                                this._downloadAndInstall(vsixAsset.browser_download_url, latestVersion, isZh);
                             }
                         });
+                    } else if (hasUpdate) {
+                        // No vsix asset, just open release page
+                        vscode.env.openExternal(vscode.Uri.parse(release.html_url));
                     }
                 } catch (e) {
                     this._view?.webview.postMessage({ type: 'updateResult', hasUpdate: false });
@@ -104,6 +120,74 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             });
         }).on('error', () => {
             this._view?.webview.postMessage({ type: 'updateResult', hasUpdate: false });
+        });
+    }
+
+    private _downloadAndInstall(url: string, version: string, isZh: boolean) {
+        const https = require('https');
+        const fs = require('fs');
+        const os = require('os');
+        const path = require('path');
+        
+        const tmpDir = os.tmpdir();
+        const vsixPath = path.join(tmpDir, `windsurf-feedback-panel-${version}.vsix`);
+        
+        const downloadMsg = isZh ? '正在下载更新...' : 'Downloading update...';
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: downloadMsg,
+            cancellable: false
+        }, async () => {
+            return new Promise<void>((resolve, reject) => {
+                const file = fs.createWriteStream(vsixPath);
+                
+                // Follow redirects
+                const download = (downloadUrl: string) => {
+                    https.get(downloadUrl, { headers: { 'User-Agent': 'VSCode-Extension' } }, (res: any) => {
+                        if (res.statusCode === 302 || res.statusCode === 301) {
+                            download(res.headers.location);
+                            return;
+                        }
+                        
+                        res.pipe(file);
+                        file.on('finish', () => {
+                            file.close();
+                            resolve();
+                        });
+                    }).on('error', (err: Error) => {
+                        fs.unlink(vsixPath, () => {});
+                        reject(err);
+                    });
+                };
+                
+                download(url);
+            });
+        }).then(() => {
+            const successMsg = isZh 
+                ? `下载完成！是否立即安装 v${version}？` 
+                : `Download complete! Install v${version} now?`;
+            const installBtn = isZh ? '安装并重启' : 'Install & Reload';
+            const cancelBtn = isZh ? '取消' : 'Cancel';
+            
+            vscode.window.showInformationMessage(successMsg, installBtn, cancelBtn)
+            .then(action => {
+                if (action === installBtn) {
+                    vscode.commands.executeCommand('workbench.extensions.installExtension', vscode.Uri.file(vsixPath))
+                    .then(() => {
+                        const reloadMsg = isZh ? '安装成功！是否重新加载窗口？' : 'Installed! Reload window?';
+                        const reloadBtn = isZh ? '重新加载' : 'Reload';
+                        vscode.window.showInformationMessage(reloadMsg, reloadBtn)
+                        .then(action => {
+                            if (action === reloadBtn) {
+                                vscode.commands.executeCommand('workbench.action.reloadWindow');
+                            }
+                        });
+                    });
+                }
+            });
+        }, () => {
+            const errMsg = isZh ? '下载失败，请手动下载' : 'Download failed, please download manually';
+            vscode.window.showErrorMessage(errMsg);
         });
     }
 
