@@ -52,6 +52,9 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                 case 'checkUpdate':
                     this._checkForUpdates();
                     break;
+                case 'openLogs':
+                    this._openLogs();
+                    break;
             }
         });
     }
@@ -121,6 +124,16 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         }).on('error', () => {
             this._view?.webview.postMessage({ type: 'updateResult', hasUpdate: false });
         });
+    }
+
+    private async _openLogs() {
+        try {
+            await vscode.commands.executeCommand('workbench.action.openExtensionLogsFolder');
+            vscode.window.showInformationMessage('Opened extension logs folder.');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage('Failed to open logs folder: ' + message);
+        }
     }
 
     private _downloadAndInstall(url: string, version: string, isZh: boolean) {
@@ -640,6 +653,9 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                 <button class="settings-action" id="checkUpdateBtn">🔄 Check for Updates</button>
             </div>
             <div class="settings-item">
+                <button class="settings-action" id="openLogsBtn">📜 Open Logs</button>
+            </div>
+            <div class="settings-item">
                 <a href="https://github.com/fhyfhy17/panel-feedback" style="color: var(--vscode-textLink-foreground);">GitHub Repository</a>
             </div>
         </div>
@@ -714,18 +730,119 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             }, 1500);
         }
 
-        // 简单的 Markdown 渲染
-        function renderMarkdown(text) {
+        function escapeHtml(text) {
             return text
-                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-                .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
-                .replace(/\\*(.*?)\\*/g, '<em>$1</em>')
-                .replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>')
-                .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
-                .replace(/^- (.*$)/gm, '• $1')
-                .replace(/\\n/g, '<br>');
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function renderInline(md) {
+            return md
+                .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+                .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+                .replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+        }
+
+        function buildTable(rows) {
+            if (rows.length === 0) return '';
+            const header = rows[0];
+            let bodyStart = 1;
+
+            if (rows[1] && rows[1].every(cell => /^:?-+:?$/.test(cell.replace(/<\\/?[^>]+>/g, '').trim()))) {
+                bodyStart = 2;
+            }
+
+            let html = '<table><thead><tr>';
+            html += header.map(c => '<th>' + c + '</th>').join('');
+            html += '</tr></thead>';
+
+            if (rows.length > bodyStart) {
+                html += '<tbody>';
+                for (let i = bodyStart; i < rows.length; i++) {
+                    html += '<tr>' + rows[i].map(c => '<td>' + c + '</td>').join('') + '</tr>';
+                }
+                html += '</tbody>';
+            }
+
+            html += '</table>';
+            return html;
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+
+            let escaped = escapeHtml(text);
+
+            const codeBlocks = [];
+            escaped = escaped.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, (_, code) => {
+                const idx = codeBlocks.length;
+                codeBlocks.push('<pre><code>' + code + '</code></pre>');
+                return '__CODE_BLOCK_' + idx + '__';
+            });
+
+            const lines = escaped.split(/\\r?\\n/);
+            const htmlParts = [];
+            let inList = false;
+            let i = 0;
+
+            const closeList = () => {
+                if (inList) {
+                    htmlParts.push('</ul>');
+                    inList = false;
+                }
+            };
+
+            while (i < lines.length) {
+                const line = lines[i];
+
+                if (/^\\s*\\|.*\\|\\s*$/.test(line)) {
+                    closeList();
+                    const tableRows = [];
+                    while (i < lines.length && /^\\s*\\|.*\\|\\s*$/.test(lines[i])) {
+                        const cells = lines[i].trim().slice(1, -1).split('|').map(c => renderInline(c.trim()));
+                        tableRows.push(cells);
+                        i++;
+                    }
+                    htmlParts.push(buildTable(tableRows));
+                    continue;
+                }
+
+                const listMatch = /^\\s*[-*]\\s+(.+)$/.exec(line);
+                if (listMatch) {
+                    if (!inList) {
+                        htmlParts.push('<ul>');
+                        inList = true;
+                    }
+                    htmlParts.push('<li>' + renderInline(listMatch[1]) + '</li>');
+                    i++;
+                    continue;
+                }
+
+                if (line.trim() === '') {
+                    closeList();
+                    i++;
+                    continue;
+                }
+
+                closeList();
+
+                const headingMatch = /^(#{1,6})\\s+(.*)$/.exec(line);
+                if (headingMatch) {
+                    const level = headingMatch[1].length;
+                    const content = renderInline(headingMatch[2]);
+                    htmlParts.push('<h' + level + '>' + content + '</h' + level + '>');
+                } else {
+                    htmlParts.push('<p>' + renderInline(line) + '</p>');
+                }
+                i++;
+            }
+
+            closeList();
+
+            let html = htmlParts.join('');
+            html = html.replace(/__CODE_BLOCK_(\\d+)__/g, (_, idx) => codeBlocks[Number(idx)] || '');
+            return html;
         }
 
         // 格式化时间
@@ -976,11 +1093,11 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         // 快捷键：回车发送，Cmd+回车换行
         feedbackInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                if (e.ctrlKey || e.metaKey) {
-                    // Cmd+回车 = 换行，不阻止默认行为
+                // Ctrl/Cmd/Shift+Enter 都当作换行
+                if (e.ctrlKey || e.metaKey || e.shiftKey) {
                     return;
                 }
-                // 回车 = 发送
+                // 仅纯 Enter 触发发送
                 e.preventDefault();
                 submit();
             }
@@ -1004,6 +1121,7 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         const settingsModal = document.getElementById('settingsModal');
         const closeSettings = document.getElementById('closeSettings');
         const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+        const openLogsBtn = document.getElementById('openLogsBtn');
         const versionText = document.getElementById('versionText');
 
         closeSettings.onclick = () => {
@@ -1020,6 +1138,10 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
             checkUpdateBtn.textContent = '🔄 Checking...';
             checkUpdateBtn.disabled = true;
             vscode.postMessage({ type: 'checkUpdate' });
+        };
+
+        openLogsBtn.onclick = () => {
+            vscode.postMessage({ type: 'openLogs' });
         };
 
         // 监听来自扩展的消息

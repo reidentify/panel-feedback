@@ -128,6 +128,12 @@ export class MCPServer {
         this.context.globalState.update('pendingRequests', requests);
     }
 
+    // 统一调试输出
+    private logDebug(message: string, extra?: Record<string, any>) {
+        const payload = extra ? ` ${JSON.stringify(extra)}` : '';
+        console.log(`[panel-feedback][mcpServer] ${message}${payload}`);
+    }
+
     // 处理请求（显示到面板）
     private async processRequest(request: PendingRequest) {
         try {
@@ -140,7 +146,7 @@ export class MCPServer {
             );
             
             // 解析反馈内容
-            const content = this.parseResponse(feedback);
+            const content = this.parseResponse(feedback, request.id);
             
             // 更新请求状态
             request.status = 'completed';
@@ -153,7 +159,7 @@ export class MCPServer {
         }
     }
 
-    private parseResponse(feedback: string): any[] {
+    private parseResponse(feedback: string, requestId?: string): any[] {
         const content: any[] = [];
         
         try {
@@ -162,6 +168,7 @@ export class MCPServer {
                 content.push({ type: 'text', text: parsed.text });
             }
             if (parsed.images && Array.isArray(parsed.images)) {
+                let parsedCount = 0;
                 for (const imageDataUrl of parsed.images) {
                     const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
                     if (match) {
@@ -170,8 +177,12 @@ export class MCPServer {
                             data: match[2],
                             mimeType: match[1]
                         });
+                        parsedCount++;
+                    } else {
+                        this.logDebug('image dataURL parse failed', { requestId, sample: imageDataUrl?.slice?.(0, 80) });
                     }
                 }
+                this.logDebug('parsed images', { requestId, count: parsedCount });
             }
         } catch {
             content.push({ type: 'text', text: feedback });
@@ -180,6 +191,12 @@ export class MCPServer {
         if (content.length === 0) {
             content.push({ type: 'text', text: '' });
         }
+
+        this.logDebug('parseResponse done', {
+            requestId,
+            contentTypes: content.map(c => c.type),
+            contentCount: content.length
+        });
         
         return content;
     }
