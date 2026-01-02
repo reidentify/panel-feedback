@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
     setTimeout(() => checkForUpdates(), 5000);
 
     // 创建侧边栏 Provider
-    const provider = new FeedbackPanelProvider(context.extensionUri);
+    const provider = new FeedbackPanelProvider(context.extensionUri, context);
     
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(

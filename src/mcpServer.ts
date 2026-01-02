@@ -51,12 +51,15 @@ export class MCPServer {
     private context: vscode.ExtensionContext | null = null;
     private workspace: string = '';
     private vscodePid: string = '';
+    private outputChannel: vscode.OutputChannel | null = null;
+    private logFilePath: string | null = null;
     
     // 端口范围
     private static readonly PORT_MIN = 19876;
     private static readonly PORT_MAX = 19899;
     private static readonly REGISTRY_DIR = path.join(os.homedir(), '.panel-feedback');
     private static readonly REGISTRY_FILE = path.join(MCPServer.REGISTRY_DIR, 'ports.json');
+    private static readonly FILE_LOGGING_KEY = 'panelFeedback.fileLogging';
 
     constructor(private provider: FeedbackPanelProvider) {
         // 获取当前工作区路径
@@ -97,6 +100,10 @@ export class MCPServer {
     // 设置扩展上下文（用于持久化）
     setContext(context: vscode.ExtensionContext) {
         this.context = context;
+        if (!this.outputChannel) {
+            this.outputChannel = vscode.window.createOutputChannel('Panel Feedback');
+        }
+        this.logFilePath = path.join(context.logUri.fsPath, 'panel-feedback.log');
         this.restorePendingRequests();
     }
 
@@ -128,10 +135,24 @@ export class MCPServer {
         this.context.globalState.update('pendingRequests', requests);
     }
 
+    private isFileLoggingEnabled(): boolean {
+        return !!this.context?.globalState.get<boolean>(MCPServer.FILE_LOGGING_KEY);
+    }
+
     // 统一调试输出
     private logDebug(message: string, extra?: Record<string, any>) {
         const payload = extra ? ` ${JSON.stringify(extra)}` : '';
-        console.log(`[panel-feedback][mcpServer] ${message}${payload}`);
+        const line = `[panel-feedback][mcpServer] ${message}${payload}`;
+        console.log(line);
+        this.outputChannel?.appendLine(line);
+
+        if (this.logFilePath && this.isFileLoggingEnabled()) {
+            fs.appendFile(this.logFilePath, line + os.EOL, (err) => {
+                if (err) {
+                    console.error('Failed to write log file:', err);
+                }
+            });
+        }
     }
 
     // 处理请求（显示到面板）
@@ -169,6 +190,7 @@ export class MCPServer {
             }
             if (parsed.images && Array.isArray(parsed.images)) {
                 let parsedCount = 0;
+                const failedSamples: { sample: string; full: string }[] = [];
                 for (const imageDataUrl of parsed.images) {
                     const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
                     if (match) {
@@ -179,10 +201,17 @@ export class MCPServer {
                         });
                         parsedCount++;
                     } else {
-                        this.logDebug('image dataURL parse failed', { requestId, sample: imageDataUrl?.slice?.(0, 80) });
+                        const sample = imageDataUrl?.slice?.(0, 120) || '';
+                        failedSamples.push({ sample, full: imageDataUrl || '' });
+                        this.logDebug('image dataURL parse failed', { requestId, sample });
                     }
                 }
-                this.logDebug('parsed images', { requestId, count: parsedCount });
+                this.logDebug('parsed images', { requestId, count: parsedCount, failed: failedSamples.length });
+                this.provider.updateImageDiagnostics({
+                    requestId,
+                    parsedCount,
+                    failedSamples
+                });
             }
         } catch {
             content.push({ type: 'text', text: feedback });

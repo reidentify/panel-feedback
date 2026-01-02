@@ -17,8 +17,16 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
     private _currentOptions: string[] = [];
     private _currentRequestId?: string;
     private _chatHistory: ChatMessage[] = [];
+    private _latestImageDiagnostics: {
+        requestId?: string;
+        parsedCount: number;
+        failedSamples: { sample: string; full: string }[];
+    } | null = null;
 
-    constructor(private readonly _extensionUri: vscode.Uri) {}
+    constructor(
+        private readonly _extensionUri: vscode.Uri,
+        private readonly _context: vscode.ExtensionContext
+    ) {}
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -54,6 +62,18 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'openLogs':
                     this._openLogs();
+                    break;
+                case 'openLatestLog':
+                    this._openLatestLogFile();
+                    break;
+                case 'getFileLoggingState':
+                    this._sendFileLoggingState();
+                    break;
+                case 'setFileLogging':
+                    this._setFileLoggingState(!!data.enabled);
+                    break;
+                case 'getImageDiagnostics':
+                    this._sendImageDiagnostics();
                     break;
             }
         });
@@ -133,6 +153,64 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage('Failed to open logs folder: ' + message);
+        }
+    }
+
+    private _sendFileLoggingState() {
+        const enabled = !!this._context.globalState.get('panelFeedback.fileLogging');
+        this._view?.webview.postMessage({ type: 'fileLoggingState', enabled });
+    }
+
+    private _setFileLoggingState(enabled: boolean) {
+        this._context.globalState.update('panelFeedback.fileLogging', enabled);
+        this._sendFileLoggingState();
+        vscode.window.showInformationMessage(enabled ? 'File logging enabled.' : 'File logging disabled.');
+    }
+
+    private _sendImageDiagnostics() {
+        if (this._latestImageDiagnostics) {
+            this._view?.webview.postMessage({ type: 'imageDiagnostics', info: this._latestImageDiagnostics });
+        }
+    }
+
+    public updateImageDiagnostics(info: { requestId?: string; parsedCount: number; failedSamples: { sample: string; full: string }[]; }) {
+        this._latestImageDiagnostics = info;
+        this._sendImageDiagnostics();
+    }
+
+    private async _openLatestLogFile() {
+        try {
+            const entries = await vscode.workspace.fs.readDirectory(this._context.logUri);
+            const logFiles: { uri: vscode.Uri; mtime: number }[] = [];
+
+            for (const [name, type] of entries) {
+                if (type === vscode.FileType.File && name.endsWith('.log')) {
+                    const uri = vscode.Uri.joinPath(this._context.logUri, name);
+                    const stat = await vscode.workspace.fs.stat(uri);
+                    logFiles.push({ uri, mtime: stat.mtime });
+                }
+            }
+
+            if (logFiles.length === 0) {
+                vscode.window.showWarningMessage('No extension host log files found.');
+                return;
+            }
+
+            logFiles.sort((a, b) => b.mtime - a.mtime);
+            const target = logFiles[0].uri;
+            const doc = await vscode.workspace.openTextDocument(target);
+            const editor = await vscode.window.showTextDocument(doc, { preview: false });
+
+            const lastLine = Math.max(doc.lineCount - 1, 0);
+            const lastChar = doc.lineAt(lastLine).range.end.character;
+            const pos = new vscode.Position(lastLine, lastChar);
+            editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.Default);
+            editor.selection = new vscode.Selection(pos, pos);
+
+            vscode.window.showInformationMessage('Opened latest log: ' + path.basename(target.fsPath));
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage('Failed to open latest log: ' + message);
         }
     }
 
@@ -656,6 +734,20 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                 <button class="settings-action" id="openLogsBtn">📜 Open Logs</button>
             </div>
             <div class="settings-item">
+                <button class="settings-action" id="openLatestLogBtn">📄 Open Latest Log</button>
+            </div>
+            <div class="settings-item">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="fileLoggingToggle" />
+                    <span>Enable file logging</span>
+                </label>
+            </div>
+            <div class="settings-item">
+                <div><strong>Image diagnostics</strong></div>
+                <div class="settings-version" id="imageDiagSummary">No data.</div>
+                <div id="imageDiagFailures" style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;"></div>
+            </div>
+            <div class="settings-item">
                 <a href="https://github.com/fhyfhy17/panel-feedback" style="color: var(--vscode-textLink-foreground);">GitHub Repository</a>
             </div>
         </div>
@@ -1122,6 +1214,10 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         const closeSettings = document.getElementById('closeSettings');
         const checkUpdateBtn = document.getElementById('checkUpdateBtn');
         const openLogsBtn = document.getElementById('openLogsBtn');
+        const openLatestLogBtn = document.getElementById('openLatestLogBtn');
+        const fileLoggingToggle = document.getElementById('fileLoggingToggle');
+        const imageDiagSummary = document.getElementById('imageDiagSummary');
+        const imageDiagFailures = document.getElementById('imageDiagFailures');
         const versionText = document.getElementById('versionText');
 
         closeSettings.onclick = () => {
@@ -1143,6 +1239,48 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
         openLogsBtn.onclick = () => {
             vscode.postMessage({ type: 'openLogs' });
         };
+
+        openLatestLogBtn.onclick = () => {
+            vscode.postMessage({ type: 'openLatestLog' });
+        };
+
+        fileLoggingToggle.onchange = () => {
+            vscode.postMessage({ type: 'setFileLogging', enabled: fileLoggingToggle.checked });
+        };
+
+        function renderImageDiagnostics(info) {
+            if (!info) {
+                imageDiagSummary.textContent = 'No data.';
+                imageDiagFailures.innerHTML = '';
+                return;
+            }
+
+            const failedCount = (info.failedSamples || []).length;
+            imageDiagSummary.textContent = 'request: ' + (info.requestId || '-') + ' | parsed: ' + info.parsedCount + ' | failed: ' + failedCount;
+            imageDiagFailures.innerHTML = '';
+
+            (info.failedSamples || []).forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.gap = '8px';
+
+                const desc = document.createElement('div');
+                desc.className = 'settings-version';
+                desc.textContent = '#' + (idx + 1) + ' ' + (item.sample || '(empty)');
+
+                const btn = document.createElement('button');
+                btn.className = 'settings-action';
+                btn.textContent = 'Copy dataURL';
+                btn.onclick = () => {
+                    navigator.clipboard.writeText(item.full || item.sample || '');
+                };
+
+                row.appendChild(desc);
+                row.appendChild(btn);
+                imageDiagFailures.appendChild(row);
+            });
+        }
 
         // 监听来自扩展的消息
         window.addEventListener('message', event => {
@@ -1176,6 +1314,14 @@ export class FeedbackPanelProvider implements vscode.WebviewViewProvider {
                 case 'openSettings':
                     settingsModal.classList.add('show');
                     vscode.postMessage({ type: 'getVersion' });
+                    vscode.postMessage({ type: 'getFileLoggingState' });
+                    vscode.postMessage({ type: 'getImageDiagnostics' });
+                    break;
+                case 'fileLoggingState':
+                    fileLoggingToggle.checked = !!data.enabled;
+                    break;
+                case 'imageDiagnostics':
+                    renderImageDiagnostics(data.info);
                     break;
             }
         });
